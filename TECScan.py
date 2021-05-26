@@ -16,7 +16,7 @@ parser.add_option("--hot", action='store_true')
 (options,args)=parser.parse_args()
 
 
-fOut = "/home/cmsdaq/Lab5015Utils/tectecscan/run"+str(options.run)+".txt"
+fOut = "/home/cmsdaq/Lab5015ThermalAnalysis/TECScan/run"+str(options.run)+".txt"
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S',filename=fOut,level=logging.INFO)
 
 timeout = 480
