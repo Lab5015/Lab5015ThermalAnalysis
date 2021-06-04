@@ -11,6 +11,7 @@ from Lab5015_utils import Keithley2450
 
 parser = OptionParser()
 parser.add_option("--run")
+parser.add_option("--time", default = 480)
 parser.add_option("--hot", action='store_true')
 
 (options,args)=parser.parse_args()
@@ -19,9 +20,12 @@ parser.add_option("--hot", action='store_true')
 fOut = "/home/cmsdaq/Lab5015ThermalAnalysis/TECScan/run"+str(options.run)+".txt"
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S',filename=fOut,level=logging.INFO)
 
-timeout = 480
+timeout = float(options.time)
+print(timeout)
+
 tensions = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 0.0]
-#tensions = [0.0, 0.0, 1.0, 3.0, 5.0, 0.0]
+#tensions = [0.0, 1.0, 3.0, 5.0, 0.0]
+#tensions = [0.0,0.0]
 if options.hot:
     tensions = [ -i for i in tensions ]
 
@@ -40,7 +44,15 @@ for tension in tensions:
     
     while True:
         elapsed_time = datetime.now() - init_time
-        temps = read_arduino_temp()
+
+        temps = []
+        try:
+            temps = read_arduino_temp()
+        except ValueError as err:
+            print(err)
+            print("the returned string is: ",temps)
+            time.sleep(1)
+            continue
 
         (_, I, V) = mykey.meas_IV()
 
