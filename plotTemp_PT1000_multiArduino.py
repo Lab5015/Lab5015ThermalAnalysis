@@ -22,7 +22,7 @@ mytemps = defaultdict(list)
 labels = []
 
 labels.append("LYSO")
-labels.append("warm TEC side")
+labels.append("dissipator side")
 labels.append("Cold Plate")
 labels.append("hot TEC side")
 labels.append("SiPMS")
@@ -39,7 +39,7 @@ def graph():
     plt.gca().xaxis.set_major_locator(mdates.MinuteLocator(interval=30))
     
     axes = plt.gca()
-    axes.set_ylim([10.,40.])
+    axes.set_ylim([0.,40.])
 
     for sensor,data in mytemps.items():
         plt.plot(mytime,data,label=labels[int(sensor)])

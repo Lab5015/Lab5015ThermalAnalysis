@@ -1,6 +1,7 @@
 #! /usr/bin/python
 import sys
 import ROOT
+from ROOT import *
 import time
 from datetime import datetime
 from optparse import OptionParser
@@ -9,12 +10,14 @@ parser = OptionParser()
 
 parser.add_option("--nArrays", dest="nArrays", default=1)
 parser.add_option("--run", dest="run", default="")
+parser.add_option("--self", action='store_true')
+parser.add_option("--selfEnd", action='store_true')
 (options, args) = parser.parse_args()
 
 inFile = 'run'+str(options.run)+'.txt'
 outFileName = 'run'+str(options.run)+'.root'
 outFile = ROOT.TFile.Open(outFileName, 'RECREATE')
-Tmin = 0.
+Tmin = -3.
 Tmax = 60.
 
 labels = []
@@ -94,7 +97,7 @@ graphs["Air"].SetLineWidth(1)
 graphs["Air"].Draw("Lsame")
 
 ymin = 0.
-ymax = 1500.
+ymax = 2000.
 axis = ROOT.TGaxis(ROOT.gPad.GetUxmax(),ROOT.gPad.GetUymin(),ROOT.gPad.GetUxmax(),ROOT.gPad.GetUymax(),ymin,ymax,510,"+L")
 axis.SetTitleColor(ROOT.kBlack);
 axis.SetLabelColor(ROOT.kBlack);
@@ -108,14 +111,16 @@ axis.Draw();
 
 graphs["TEC power scaled"] = ROOT.TGraph()
 for point in range(graphs["TEC power"].GetN()):
-    graphs["TEC power scaled"].SetPoint(point,graphs["TEC power"].GetPointX(point),(graphs["TEC power"].GetPointY(point)-ymin)*Tmax/(ymax-ymin))
+    graphs["TEC power scaled"].SetPoint(point,graphs["TEC power"].GetPointX(point),(graphs["TEC power"].GetPointY(point)-ymin)*(Tmax-Tmin)/(ymax-ymin))
 graphs["TEC power scaled"].SetLineColor(colors["TEC power"])
 graphs["TEC power scaled"].Draw("Lsame")
 
 leg1 = ROOT.TLegend(0.17, 0.89-7*0.04, 0.39, 0.89)
 leg1.AddEntry(graphs["SiPMs"] , 'SiPM', 'L')
-leg1.AddEntry(graphs["Warm TEC side"] , 'Warm TEC side', 'L')
-leg1.AddEntry(graphs["Hot TEC side"] , 'Hot TEC side', 'L')
+#leg1.AddEntry(graphs["Warm TEC side"] , 'Warm TEC side', 'L')
+#leg1.AddEntry(graphs["Warm TEC side"] , 'Dissipator side', 'L')
+leg1.AddEntry(graphs["Warm TEC side"] , 'Hot TEC side left', 'L')
+leg1.AddEntry(graphs["Hot TEC side"] , 'Hot TEC side right', 'L')
 leg1.AddEntry(graphs["Cold plate"] , 'Cold Plate', 'L')
 leg1.AddEntry(graphs["LYSO"] , 'LYSO', 'L')
 leg1.AddEntry(graphs["Air"] , 'Air', 'L')
@@ -133,34 +138,52 @@ graph_TECPower_vs_deltaTInit = ROOT.TGraph()
 point_change = -1
 val_change = 0.
 tSiPMInit = 0.
-
+counter = 0
+step = 0
+if options.selfEnd:
+    fitEnd = ROOT.TF1("fitEnd", "[0]", graphs["SiPMs"].GetPointX(graphs["SiPMs"].GetN()-25), graphs["SiPMs"].GetPointX(graphs["SiPMs"].GetN()-1))
+    graphs["SiPMs"].Fit(fitEnd,"QRS")
+    startValue = fitEnd.GetParameter(0)
+    print(startValue)
+if options.self:
+    fitStart = ROOT.TF1("fitStart", "[0]", graphs["SiPMs"].GetPointX(25*6), graphs["SiPMs"].GetPointX(25*7))
+    graphs["SiPMs"].Fit(fitStart,"QRS")
+    startValue = fitStart.GetParameter(0)
+    print(startValue)
 for point in range(graphs["V"].GetN()):
     if point_change == -1:
         point_change = point
         val_change = graphs["V"].GetPointY(point)
     
     diff = graphs["V"].GetPointY(point) - val_change
-    
-    if abs(diff) > 0.001:
+    counter += 1
+    if abs(diff) > 0.15:
         point_change = point
-        val_change = graphs["V"].GetPointY(point)        
+        val_change = graphs["V"].GetPointY(point)
         
-        tmax = graphs["V"].GetPointX(point-1)
-        tmin = graphs["V"].GetPointX(point-25)
-        
-        labels_to_fit = ["SiPMs", "Hot TEC side", "TEC power scaled", "TEC power", "Cold plate"]
-        funcs = {}
-        for label in labels_to_fit:
-            funcs[label] = ROOT.TF1("func"+label,"[0]",tmin,tmax)
+	tmax = graphs["V"].GetPointX(point-1)
+	tmin = graphs["V"].GetPointX(point-int(counter*0.13))
+	tminPower = graphs["V"].GetPointX(point-int(counter*0.9))
+	counter = 0
+	labels_to_fit = ["SiPMs", "Hot TEC side", "TEC power scaled", "TEC power", "Cold plate"]
+	funcs = {}
+	for label in labels_to_fit:
+            if label != 'TEC power' and label != 'TEC power scaled' :
+		funcs[label] = ROOT.TF1("func"+label,"[0]",tmin,tmax)
+            else:            
+		funcs[label] = ROOT.TF1("func"+label,"[0]",tminPower,tmax)
             graphs[label].Fit(funcs[label],"QNRS")
             funcs[label].SetLineColor(colors[label])
             funcs[label].SetLineWidth(3)
             if label != "TEC power":
                 funcs[label].Draw("same")
         
-        graph_TECPower_vs_deltaT.SetPoint(graph_TECPower_vs_deltaT.GetN(),funcs["SiPMs"].GetParameter(0)-funcs["Hot TEC side"].GetParameter(0),funcs["TEC power"].GetParameter(0))
-        graph_TECPower_vs_deltaTInit.SetPoint(graph_TECPower_vs_deltaTInit.GetN(),funcs["SiPMs"].GetParameter(0) - funcs["Cold plate"].GetParameter(0),funcs["TEC power"].GetParameter(0))
-
+        graph_TECPower_vs_deltaT.SetPoint(graph_TECPower_vs_deltaT.GetN(),funcs["SiPMs"].GetParameter(0)-funcs["Hot TEC side"].GetParameter(0),funcs["TEC power"].GetParameter(0))        
+        if options.self or options.selfEnd:
+            graph_TECPower_vs_deltaTInit.SetPoint(graph_TECPower_vs_deltaTInit.GetN(),funcs["SiPMs"].GetParameter(0) - startValue,funcs["TEC power"].GetParameter(0))
+            #graph_TECPower_vs_deltaTInit.SetPoint(graph_TECPower_vs_deltaTInit.GetN(),funcs["SiPMs"].GetParameter(0) - startValue,funcs["TEC power"].GetParameter(0))
+        else:
+            graph_TECPower_vs_deltaTInit.SetPoint(graph_TECPower_vs_deltaTInit.GetN(),funcs["SiPMs"].GetParameter(0) - funcs["Cold plate"].GetParameter(0),funcs["TEC power"].GetParameter(0))
 
 c2 = ROOT.TCanvas('','',1300,600)
 c2.SetGridx()
@@ -221,5 +244,12 @@ graph_arjan_lab2.Write("graph_arjan_lab2")
 graph_arjan_lab1.Write("graph_arjan_lab1")
 graph_TECPower_vs_deltaTInit.Write("graph_TECPower_vs_deltaTInit")
 graph_TECPower_vs_deltaT.Write("graph_TECPower_vs_deltaT")
-graphs["TEC power scaled"].Write("graph_TEC_Power")
+graphs["TEC power"].Write("graph_TEC_Power")
+graphs["SiPMs"].Write("SiPMs")
+#graphs["Warm TEC side"].Write("graph_warmTECSide")
+graphs["Warm TEC side"].Write("graph_dissipatorSide")
+graphs["Hot TEC side"].Write("graph_hotTECSide")
+graphs["Cold plate"].Write("graph_coldPlate")
+graphs["LYSO"].Write("graph_LYSO")
+graphs["Air"].Write("graph_Air")
 raw_input('ok?')
