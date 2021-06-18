@@ -13,9 +13,9 @@ from Lab5015_utils import sipmPower
 parser = OptionParser()
 parser.add_option("--run")
 parser.add_option("--stepTime", default = 480)
-parser.add_option("--initialTime", default = 0)
+parser.add_option("--initialTime", default = 0.)
 parser.add_option("--hot", action='store_true')
-parser.add_option("--sipmLoad", default = 0.432)
+parser.add_option("--sipmLoad", default = 0.)
 
 (options,args)=parser.parse_args()
 
@@ -31,18 +31,21 @@ if options.hot:
     tensions = [ -i for i in tensions ]
 print(tensions)
 
-print("initial timeout: "+options.initialTime)
+print("initial timeout: "+str(options.initialTime))
 time.sleep(float(options.initialTime))
 
 # turn on SiPM's PS
-sipm = sipmPower(options.sipmLoad)
-sipm.power_on()
+sipm = None
+if float(options.sipmLoad) != 0.:
+    sipm = sipmPower(options.sipmLoad)
+    sipm.power_on()
 
 # turn on TEC's PS
 mykey = Keithley2450()
 mykey.set_V(0)
+mykey.set_4wire("OFF")
 mykey.set_state(1)
-
+state = 0
 
 timeout = float(options.stepTime)
 print("timeout per step: ",timeout)
@@ -51,6 +54,13 @@ init_time = datetime.now()
 
 for itr,tension in enumerate(tensions):
     try:
+        if tension != 0. and state == 0:
+            mykey.set_4wire("ON")
+            mykey.set_state(1)
+            state += 1
+        if tension == 0. and state != 0:
+            mykey.set_4wire("OFF")
+            mykey.set_state(1)
         mykey.set_V(tension)
         print("The tension is: ", tension)
     
@@ -75,8 +85,9 @@ for itr,tension in enumerate(tensions):
             logging.info(out)
             sys.stdout.flush()
 
-            if itr > 0: # skip the first position
-                sipm.compute_voltage()        
+            if float(options.sipmLoad) != 0.: 
+                if itr > 0: # skip the first position
+                    sipm.compute_voltage()        
         
             if elapsed_time.total_seconds() > timeout:
                 init_time = datetime.now()
@@ -88,7 +99,8 @@ for itr,tension in enumerate(tensions):
         time.sleep(3)
 
 print("--- powering off both PS")
-sipm.power_off()
+if float(options.sipmLoad) != 0.: 
+    sipm.power_off()
 mykey.set_state(0)
 print("bye")
 sys.exit(0)
