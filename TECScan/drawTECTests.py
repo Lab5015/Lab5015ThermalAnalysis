@@ -12,13 +12,16 @@ parser.add_option("--nArrays", dest="nArrays", default=1)
 parser.add_option("--run", dest="run", default="")
 parser.add_option("--self", action='store_true')
 parser.add_option("--selfEnd", action='store_true')
+parser.add_option("--averageColdPlate", action='store_true')
 (options, args) = parser.parse_args()
 
 inFile = 'run'+str(options.run)+'.txt'
 outFileName = 'run'+str(options.run)+'.root'
 outFile = ROOT.TFile.Open(outFileName, 'RECREATE')
-Tmin = -3.
-Tmax = 60.
+Tmin = -45.
+Tmax = 25.
+#Tmin = -3.
+#Tmax = 60.
 
 labels = []
 colors = {}
@@ -96,7 +99,7 @@ graphs["Air"].SetLineColor(colors["Air"])
 graphs["Air"].SetLineWidth(1)
 graphs["Air"].Draw("Lsame")
 
-ymin = 0.
+ymin = -100.
 ymax = 2000.
 axis = ROOT.TGaxis(ROOT.gPad.GetUxmax(),ROOT.gPad.GetUymin(),ROOT.gPad.GetUxmax(),ROOT.gPad.GetUymax(),ymin,ymax,510,"+L")
 axis.SetTitleColor(ROOT.kBlack);
@@ -111,7 +114,8 @@ axis.Draw();
 
 graphs["TEC power scaled"] = ROOT.TGraph()
 for point in range(graphs["TEC power"].GetN()):
-    graphs["TEC power scaled"].SetPoint(point,graphs["TEC power"].GetPointX(point),(graphs["TEC power"].GetPointY(point)-ymin)*(Tmax-Tmin)/(ymax-ymin))
+    graphs["TEC power scaled"].SetPoint(point,graphs["TEC power"].GetPointX(point),(graphs["TEC power"].GetPointY(point)-ymin)*(Tmax-Tmin)/(ymax-ymin) + Tmin)
+    
 graphs["TEC power scaled"].SetLineColor(colors["TEC power"])
 graphs["TEC power scaled"].Draw("Lsame")
 
@@ -140,13 +144,19 @@ val_change = 0.
 tSiPMInit = 0.
 counter = 0
 step = 0
+
+if options.averageColdPlate:
+    fitColdPlate = ROOT.TF1("fitColdPlate", "[0]", graphs["Cold plate"].GetPointX(25*40), graphs["Cold plate"].GetPointX(25*60))
+    graphs["Cold plate"].Fit(fitColdPlate,"QRS")
+    startValue = fitColdPlate.GetParameter(0)
+
 if options.selfEnd:
     fitEnd = ROOT.TF1("fitEnd", "[0]", graphs["SiPMs"].GetPointX(graphs["SiPMs"].GetN()-25), graphs["SiPMs"].GetPointX(graphs["SiPMs"].GetN()-1))
     graphs["SiPMs"].Fit(fitEnd,"QRS")
     startValue = fitEnd.GetParameter(0)
-    print(startValue)
+    
 if options.self:
-    fitStart = ROOT.TF1("fitStart", "[0]", graphs["SiPMs"].GetPointX(25*6), graphs["SiPMs"].GetPointX(25*7))
+    fitStart = ROOT.TF1("fitStart", "[0]", graphs["SiPMs"].GetPointX(25*5), graphs["SiPMs"].GetPointX(25*8))
     graphs["SiPMs"].Fit(fitStart,"QRS")
     startValue = fitStart.GetParameter(0)
     print(startValue)
@@ -154,16 +164,23 @@ for point in range(graphs["V"].GetN()):
     if point_change == -1:
         point_change = point
         val_change = graphs["V"].GetPointY(point)
+    nStep = graph_TECPower_vs_deltaT.GetN()
     
     diff = graphs["V"].GetPointY(point) - val_change
     counter += 1
     if abs(diff) > 0.15:
+        
         point_change = point
         val_change = graphs["V"].GetPointY(point)
         
 	tmax = graphs["V"].GetPointX(point-1)
-	tmin = graphs["V"].GetPointX(point-int(counter*0.13))
-	tminPower = graphs["V"].GetPointX(point-int(counter*0.9))
+        tmin = 0
+        if (nStep  == 0):
+            tmin = graphs["V"].GetPointX(point-int(counter*0.2))
+        else:
+            tmin = graphs["V"].GetPointX(point-int(counter*0.2))
+           
+	tminPower = graphs["V"].GetPointX(point-int(counter*0.6))
 	counter = 0
 	labels_to_fit = ["SiPMs", "Hot TEC side", "TEC power scaled", "TEC power", "Cold plate"]
 	funcs = {}
@@ -178,13 +195,12 @@ for point in range(graphs["V"].GetN()):
             if label != "TEC power":
                 funcs[label].Draw("same")
         
-        graph_TECPower_vs_deltaT.SetPoint(graph_TECPower_vs_deltaT.GetN(),funcs["SiPMs"].GetParameter(0)-funcs["Hot TEC side"].GetParameter(0),funcs["TEC power"].GetParameter(0))        
-        if options.self or options.selfEnd:
+        graph_TECPower_vs_deltaT.SetPoint(graph_TECPower_vs_deltaT.GetN(),funcs["SiPMs"].GetParameter(0)-funcs["Hot TEC side"].GetParameter(0),funcs["TEC power"].GetParameter(0))
+        if (options.self or options.selfEnd or options.averageColdPlate):
             graph_TECPower_vs_deltaTInit.SetPoint(graph_TECPower_vs_deltaTInit.GetN(),funcs["SiPMs"].GetParameter(0) - startValue,funcs["TEC power"].GetParameter(0))
-            #graph_TECPower_vs_deltaTInit.SetPoint(graph_TECPower_vs_deltaTInit.GetN(),funcs["SiPMs"].GetParameter(0) - startValue,funcs["TEC power"].GetParameter(0))
         else:
             graph_TECPower_vs_deltaTInit.SetPoint(graph_TECPower_vs_deltaTInit.GetN(),funcs["SiPMs"].GetParameter(0) - funcs["Cold plate"].GetParameter(0),funcs["TEC power"].GetParameter(0))
-
+        
 c2 = ROOT.TCanvas('','',1300,600)
 c2.SetGridx()
 c2.SetGridy()
